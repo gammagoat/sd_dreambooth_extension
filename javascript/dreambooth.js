@@ -261,6 +261,10 @@ function db_start_checkpoint() {
     return db_start(1, true, true, arguments);
 }
 
+function db_start_extra_network() {
+    return db_start(1, true, true, arguments);
+}
+
 // Generate sample prompts
 function db_start_prompts() {
     return db_start(1, true, false, arguments);

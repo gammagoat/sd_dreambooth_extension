@@ -11,7 +11,7 @@ from typing import Dict
 
 import safetensors.torch
 import torch
-from diffusers import UNet2DConditionModel
+from diffusers import UNet2DConditionModel, StableDiffusionPipeline
 from torch import Tensor, nn
 
 try:
@@ -23,7 +23,8 @@ try:
         disable_safe_unpickle, enable_safe_unpickle, import_model_class_from_model_name_or_path
     from extensions.sd_dreambooth_extension.dreambooth.utils.utils import printi
     from extensions.sd_dreambooth_extension.helpers.mytqdm import mytqdm
-    from extensions.sd_dreambooth_extension.lora_diffusion.lora import merge_lora_to_model
+    from extensions.sd_dreambooth_extension.lora_diffusion.lora import merge_lora_to_model, patch_pipe, get_target_module, TEXT_ENCODER_EXTENDED_TARGET_REPLACE, TEXT_ENCODER_DEFAULT_TARGET_REPLACE
+    from extensions.sd_dreambooth_extension.lora_diffusion.extra_networks import save_extra_networks
 except:
     from dreambooth.dreambooth import shared as shared  # noqa
     from dreambooth.dreambooth.dataclasses.db_config import from_file, DreamboothConfig  # noqa
@@ -535,6 +536,74 @@ def compile_checkpoint(model_name: str, lora_file_name: str = None, reload_model
     if reload_models:
         reload_system_models()
     msg = f"Checkpoint compiled successfully: {checkpoint_path}"
+    printi(msg, log=log)
+    return msg
+
+def compile_extra_network(model_name: str, lora_file_name: str = None, reload_models: bool = True, log: bool = True,
+                       snap_rev: str = ""):
+    """
+
+    @param model_name: The model name to compile
+    @param reload_models: Whether to reload the system list of checkpoints.
+    @param lora_file_name: The path to a lora pt file to merge with the unet. Auto set during training.
+    @param log: Whether to print messages to console/UI.
+    @param snap_rev: The revision of snapshot to load from
+    @return: status: What happened, path: Checkpoint path
+    """
+    unload_system_models()
+    status.textinfo = "Compiling extra_network."
+    status.job_no = 0
+    status.job_count = 7
+
+    config = from_file(model_name)
+
+    if not model_name:
+        msg = "Select a model to compile."
+        print(msg)
+        return msg    
+  
+    model_path = config.pretrained_model_name_or_path
+    lora_path = os.path.join(os.path.dirname(model_path), "loras", config.lora_model_name)
+
+    s_pipeline = StableDiffusionPipeline.from_pretrained(model_path)
+
+    unet_target_module = get_target_module("module", config.use_lora_extended)
+    
+    tenc_target_module = TEXT_ENCODER_EXTENDED_TARGET_REPLACE if config.use_lora_extended else TEXT_ENCODER_DEFAULT_TARGET_REPLACE
+    
+    patch_pipe(
+        s_pipeline,
+        lora_path,
+        r=config.lora_unet_rank,
+        r_txt=config.lora_txt_rank,
+        unet_target_replace_module=unet_target_module,
+        text_target_replace_module=tenc_target_module
+    )
+
+    modelmap = {"unet": (s_pipeline.unet, unet_target_module)}
+    if config.stop_text_encoder != 0:
+        modelmap["text_encoder"] = (s_pipeline.text_encoder, tenc_target_module)
+
+    if config.save_lora_for_extra_net:
+        if config.use_lora_extended:
+            if not os.path.exists(os.path.join(shared.script_path, "extensions", "a1111-sd-webui-locon")):
+                raise Exception(r"a1111-sd-webui-locon extension is required to save "
+                                r"extra net for extended lora. Please install "
+                                r"https://github.com/KohakuBlueleaf/a1111-sd-webui-locon")
+        os.makedirs(shared.ui_lora_models_path, exist_ok=True)
+        lora_model_name = config.lora_model_name
+        lora_model_name = lora_model_name.replace(".pt", "_old.safetensors")
+        out_safe = os.path.join(shared.ui_lora_models_path, lora_model_name)
+        save_extra_networks(modelmap, out_safe)
+
+    try:
+        del s_pipeline
+    except:
+        pass
+    # cleanup()
+    if reload_models:
+        reload_system_models()
+    msg = f"Extra Networks Lora created: {out_safe}"
     printi(msg, log=log)
     return msg
 

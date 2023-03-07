@@ -5,7 +5,7 @@ from typing import List
 import gradio as gr
 
 from extensions.sd_dreambooth_extension.dreambooth.dataclasses.db_config import save_config, from_file
-from extensions.sd_dreambooth_extension.dreambooth.diff_to_sd import compile_checkpoint
+from extensions.sd_dreambooth_extension.dreambooth.diff_to_sd import compile_checkpoint, compile_extra_network
 from extensions.sd_dreambooth_extension.dreambooth.secret import get_secret, create_secret, clear_secret
 from extensions.sd_dreambooth_extension.dreambooth.shared import status, get_launch_errors
 from extensions.sd_dreambooth_extension.dreambooth.ui_functions import performance_wizard, \
@@ -168,6 +168,18 @@ def ui_gen_ckpt(model_name: str):
     res = compile_checkpoint(model_name, lora_path, True, True, config.snapshot)
     return res
 
+def ui_gen_extra_network(model_name: str):
+    if isinstance(model_name, List):
+        model_name = model_name[0]
+    if model_name == "" or model_name is None:
+        return "Please select a model."
+    config = from_file(model_name)
+    printm("Config loaded")
+    lora_path = config.lora_model_name
+    print(f"Lora path: {lora_path}")
+    res = compile_extra_network(model_name, lora_path, True, True, config.snapshot)
+    return res
+
 
 def on_ui_tabs():
     with gr.Blocks() as dreambooth_interface:
@@ -177,6 +189,7 @@ def on_ui_tabs():
             db_save_params = gr.Button(value="Save Settings", elem_id="db_save_config")
             db_train_model = gr.Button(value="Train", variant='primary', elem_id="db_train")
             db_generate_checkpoint = gr.Button(value="Generate Ckpt", elem_id="db_gen_ckpt")
+            db_generate_extra_network = gr.Button(value="Gen Lora for Extra Networks", elem_id="db_gen_extra_network")
             db_generate_checkpoint_during = gr.Button(value="Save Weights", elem_id="db_gen_ckpt_during")
             db_train_sample = gr.Button(value="Generate Samples", elem_id="db_train_sample")
             db_cancel = gr.Button(value="Cancel", elem_id="db_cancel")
@@ -1050,6 +1063,17 @@ def on_ui_tabs():
         db_generate_checkpoint.click(
             _js="db_start_checkpoint",
             fn=wrap_gpu_call(ui_gen_ckpt),
+            inputs=[
+                db_model_name
+            ],
+            outputs=[
+                db_status
+            ]
+        )
+
+        db_generate_extra_network.click(
+            _js="db_start_extra_network",
+            fn=wrap_gpu_call(ui_gen_extra_network),
             inputs=[
                 db_model_name
             ],
