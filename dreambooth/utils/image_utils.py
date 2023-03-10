@@ -427,15 +427,15 @@ def open_and_trim(image_path: str, reso: Tuple[int, int], return_pil: bool = Fal
         image = image.convert("RGB")
 
     # Upscale image if necessary
-    scale_factor = max(reso[0] / image.width, reso[1] / image.height)
+    scale_factor = max(768.0 / image.width, 768.0 / image.height)
     if scale_factor != 1:
         new_size = (int(image.width * scale_factor), int(image.height * scale_factor))
         image = image.resize(new_size, resample=Image.LANCZOS)
 
     # Crop image to target resolution
-    if image.width != reso[0] or image.height != reso[1]:
-        box = (0, 0, reso[0], reso[1])
-        image = image.crop(box)
+    #if image.width != reso[0] or image.height != reso[1]:
+    #    box = (0, 0, reso[0], reso[1])
+    #    image = image.crop(box)
 
     # Return as np array or PIL image
     if return_pil:

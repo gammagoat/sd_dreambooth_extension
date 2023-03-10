@@ -24,6 +24,8 @@ from tensorflow.python.framework.random_seed import set_seed as set_seed1
 from torch.cuda.profiler import profile
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
+from torchvision.transforms import transforms
+
 
 try:
     from extensions.sd_dreambooth_extension.dreambooth import xattention, shared
@@ -630,7 +632,7 @@ def main(use_txt2img: bool = True) -> TrainResult:
                     save_model = True
                     last_model_save = session_epoch
 
-                # Repeat for sample images
+                # Repeat for  images
                 if 0 < save_image_interval <= session_epoch - last_image_save:
                     save_image = True
                     last_image_save = session_epoch
@@ -933,13 +935,24 @@ def main(use_txt2img: bool = True) -> TrainResult:
                     status.job_count = max_train_steps
                     status.job_no += train_batch_size
                     continue
+
                 with accelerator.accumulate(unet), accelerator.accumulate(text_encoder):
                     # Convert images to latent space
                     with torch.no_grad():
                         if args.cache_latents:
                             latents = batch["images"].to(accelerator.device)
                         else:
-                            latents = vae.encode(batch["images"].to(dtype=weight_dtype)).latent_dist.sample()
+                            augment = transforms.Compose(
+                                [   
+                                    transforms.Normalize([-1.0], [2.0]),
+                                    transforms.ColorJitter(brightness=.15, hue=.02),
+                                    transforms.RandomPerspective(distortion_scale=0.1, p=1.0),
+                                    transforms.CenterCrop(704),
+                                    transforms.RandomCrop(672),
+                                    transforms.Normalize([0.5], [0.5])        
+                                ])
+                            images = augment(batch["images"])
+                            latents = vae.encode(images.to(dtype=weight_dtype)).latent_dist.sample()
                         latents = latents * 0.18215
 
                     # Sample noise that we'll add to the latents
