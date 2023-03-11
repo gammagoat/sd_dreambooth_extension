@@ -946,9 +946,10 @@ def main(use_txt2img: bool = True) -> TrainResult:
                                 [   
                                     transforms.Normalize([-1.0], [2.0]),
                                     transforms.ColorJitter(brightness=.15, hue=.02),
-                                    transforms.RandomPerspective(distortion_scale=0.1, p=1.0),
-                                    transforms.CenterCrop(704),
-                                    transforms.RandomCrop(672),
+                                    # transforms.RandomPerspective(distortion_scale=0.1, p=1.0),
+                                    #transforms.CenterCrop(704),
+                                    transforms.RandomCrop(704),
+                                    transforms.Resize(512),
                                     transforms.Normalize([0.5], [0.5])        
                                 ])
                             images = augment(batch["images"])
