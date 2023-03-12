@@ -15,6 +15,7 @@ import torch
 import torch.backends.cuda
 import torch.backends.cudnn
 import torch.utils.checkpoint
+import numpy as np
 from accelerate import Accelerator
 from accelerate.utils.random import set_seed as set_seed2
 from diffusers import AutoencoderKL, DiffusionPipeline, UNet2DConditionModel, DDPMScheduler, DEISMultistepScheduler
@@ -690,6 +691,10 @@ def main(use_txt2img: bool = True) -> TrainResult:
             # Create the pipeline using the trained modules and save it.
             if accelerator.is_main_process:
                 printm("Pre-cleanup.")
+                torch_rng_state = torch.get_rng_state()
+                cuda_gpu_rng_state = torch.cuda.get_rng_state(device="cuda")
+                cuda_cpu_rng_state = torch.cuda.get_rng_state(device="cpu")
+
                 optim_to(torch, profiler, optimizer)
                 if profiler is not None:
                     cleanup()
@@ -829,7 +834,8 @@ def main(use_txt2img: bool = True) -> TrainResult:
                                                          negative_prompt=c.negative_prompt,
                                                          height=c.resolution[0],
                                                          width=c.resolution[1],
-                                                         generator=generator).images[0]
+                                                         generator=generator
+                                                         ).images[0]
                                     sample_prompts.append(c.prompt)
                                     image_name = db_save_image(s_image, c, custom_name=f"sample_{args.revision}-{ci}")
                                     shared.status.current_image = image_name
@@ -848,6 +854,7 @@ def main(use_txt2img: bool = True) -> TrainResult:
                             print(f"Exception saving sample: {em}")
                             traceback.print_exc()
                             pass
+                       
                 printm("Starting cleanup.")
                 del s_pipeline
                 if save_image:
@@ -881,8 +888,12 @@ def main(use_txt2img: bool = True) -> TrainResult:
 
                 status.current_image = last_samples
                 printm("Cleanup.")
+                torch.set_rng_state(torch_rng_state)
+                torch.cuda.set_rng_state(cuda_cpu_rng_state, device="cpu")
+                torch.cuda.set_rng_state(cuda_gpu_rng_state, device="cuda")
                 optim_to(torch, profiler, optimizer, accelerator.device)
                 cleanup()
+
                 printm("Cleanup completed.")
 
         # Only show the progress bar once on each machine.
